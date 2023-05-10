@@ -1,0 +1,12 @@
+[project]
+name = "ugssl"
+version = "0.1"
+description = "Uncertainty-guided semi-supervised learning for medical imaging"
+readme = "README.md"
+authors = [{name = "Bram de Wilde", email = "contact@bramdewilde.com"}]
+dependencies = ["matplotlib"]
+license = {file = "LICENSE"}
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
