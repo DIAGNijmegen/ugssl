@@ -15,6 +15,8 @@ dest_dir/
     labelsTr/
     imagesUl/
 
+this also assumes IDs <500 are CT scans, otherwise MR.
+
 """
 from argparse import ArgumentParser
 from pathlib import Path
@@ -22,6 +24,7 @@ import random
 import shutil
 import json
 from tqdm import tqdm
+from sklearn.model_selection import train_test_split
 
 
 def main(source_dir: Path, dest_dir: Path, percentage_labeled: int):
@@ -40,11 +43,17 @@ def main(source_dir: Path, dest_dir: Path, percentage_labeled: int):
     files = list((source_dir / "imagesTr").glob("*.nii.gz"))
     print(f"Found {len(files)} cases")
 
+    # Get ct/mr, ct = 1, mr = 0
+    is_ct = []
+    for filepath in files:
+        id = filepath.stem.split("_")[1]
+        is_ct.append(int(id) < 500)
+
     to_select = int((percentage_labeled / 100) * len(files))
     print(f"Selecting {to_select} cases for labeled subset")
 
     # Copy image and labels
-    selected_files = random.sample(files, to_select)
+    _, selected_files = train_test_split(files, test_size=to_select, stratify=is_ct)
     for image_path in tqdm(files, desc="Copying files"):
         label_name = image_path.name.replace("_0000", "")
         label_path = source_dir / "labelsTr" / label_name
