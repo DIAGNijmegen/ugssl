@@ -17,14 +17,21 @@ from argparse import ArgumentParser
 from pathlib import Path
 import pandas as pd
 import SimpleITK as sitk
+import numpy as np
 
-from ugssl.metrics import PairwiseDSC
+from ugssl.metrics import PairwiseDSC, MaxProbability, Entropy, Variance
 
 
 def load_nifti(path):
     image_sitk = sitk.ReadImage(str(path))
     image = sitk.GetArrayFromImage(image_sitk)
     return image
+
+
+def load_softmax(softmax_path):
+    softmax = np.load(softmax_path)
+    softmax = softmax["probabilities"]
+    return softmax
 
 
 def is_complete(predictions_dir, case_id):
@@ -35,13 +42,24 @@ def is_complete(predictions_dir, case_id):
     return True
 
 
-def load_predictions(predictions_dir, case_id):
-    predictions = []
-    for fold_idx in range(5):
-        path = predictions_dir / f"fold_{fold_idx}" / f"{case_id}.nii.gz"
-        predictions.append(load_nifti(path))
+def load_predictions(predictions_dir, case_id, format):
+    if format == "segmentation":
+        predictions = []
+        for fold_idx in range(5):
+            path = predictions_dir / f"fold_{fold_idx}" / f"{case_id}.nii.gz"
+            predictions.append(load_nifti(path))
+        return predictions
 
-    return predictions
+    if format == "softmax":
+        predictions = []
+        for fold_idx in range(5):
+            path = predictions_dir / f"fold_{fold_idx}" / f"{case_id}.npz"
+            predictions.append(load_softmax(path))
+        return predictions
+
+    if format == "ensemble":
+        path = predictions_dir.parent / f"ensemble_train" / f"{case_id}.npz"
+        return [load_softmax(path)]
 
 
 def main(predictions_dir, csv_path, pkl_dir, n_labels, verbose=False):
@@ -54,7 +72,12 @@ def main(predictions_dir, csv_path, pkl_dir, n_labels, verbose=False):
     else:
         csv_dict = {}
 
-    metrics = {"pairwise_dsc": PairwiseDSC([i for i in range(n_labels + 1)])}
+    metrics = {
+        "pairwise_dsc": PairwiseDSC([i for i in range(n_labels + 1)]),
+        "max_probability": MaxProbability(),
+        "entropy": Entropy(),
+        "variance": Variance(),
+    }
 
     for case_path in (predictions_dir / "fold_0").glob("*.nii.gz"):
         case_id = case_path.name[:-7]
@@ -69,12 +92,14 @@ def main(predictions_dir, csv_path, pkl_dir, n_labels, verbose=False):
                 print(f"Skipping incomplete case {case_id}")
             continue
 
-        predictions = load_predictions(predictions_dir, case_id)
         csv_dict[case_id] = {}
+        predictions = {}
+        for format in ["segmentation", "softmax"]:
+            predictions[format] = load_predictions(predictions_dir, case_id, format)
         for metric_name, metric in metrics.items():
             if pkl_dir:
                 pkl_path = pkl_dir / f"{case_id}_{metric_name}.pkl"
-            result = metric(predictions, pkl_path=pkl_path)
+            result = metric(predictions[metric.format], pkl_path=pkl_path)
 
             for value_label, value in result.items():
                 csv_dict[case_id][value_label] = value

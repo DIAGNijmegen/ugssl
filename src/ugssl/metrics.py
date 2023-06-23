@@ -32,6 +32,7 @@ class PairwiseDSC(UncertaintyMetric):
     def __init__(self, labels: List[int], n_workers=8):
         self.labels = labels
         self.n_workers = n_workers
+        self.format = "segmentation"
 
     def __call__(self, predictions: List[np.ndarray], pkl_path: Path = None) -> Dict:
         n_predictions = len(predictions)
@@ -59,7 +60,10 @@ class PairwiseDSC(UncertaintyMetric):
             tp, fp, fn, tn = self.compute_tp_fp_fn_tn(
                 prediction_a_single, prediction_b_single
             )
-            dsc = 2 * tp / (2 * tp + fp + fn)
+            if tp == 0 and fp == 0 and fn == 0:
+                dsc = 1
+            else:
+                dsc = 2 * tp / (2 * tp + fp + fn)
             dsc_values[label] = dsc
 
         return dsc_values
@@ -110,3 +114,48 @@ class PairwiseDSC(UncertaintyMetric):
     def _pickle_raw_results(self, results, pkl_path):
         with open(pkl_path, "wb") as pkl_file:
             pickle.dump(results, pkl_file)
+
+
+class MaxProbability(UncertaintyMetric):
+    def __init__(self):
+        self.format = "softmax"
+
+    def __call__(self, predictions: List[np.ndarray], pkl_path: Path = None) -> Dict:
+        # Ensemble predictions
+        ensemble = sum(predictions) / len(predictions)
+
+        # Take max class prediction for each voxel
+        ensemble = np.max(ensemble, axis=0)
+
+        # Return the average over all pixels
+        return {"max_probability": np.mean(ensemble)}
+
+
+class Entropy(UncertaintyMetric):
+    def __init__(self):
+        self.format = "softmax"
+
+    def __call__(self, predictions: List[np.ndarray], pkl_path: Path = None) -> Dict:
+        # Ensemble predictions
+        ensemble = sum(predictions) / len(predictions) + 1e-6
+
+        # Take max class prediction for each voxel
+        ensemble = -ensemble * np.log(ensemble)
+        ensemble = np.sum(ensemble, axis=0)
+
+        # Return the average over all pixels
+        return {"entropy": np.mean(ensemble)}
+
+
+class Variance(UncertaintyMetric):
+    def __init__(self):
+        self.format = "softmax"
+
+    def __call__(self, predictions: List[np.ndarray], pkl_path: Path = None) -> Dict:
+        variance = 0
+        for c in range(predictions[0].shape[0]):
+            stacked = np.stack([prediction[c] for prediction in predictions])
+            variance += np.mean(np.var(stacked, axis=0)) / predictions[0].shape[0]
+
+        # Return the average over all pixels
+        return {"variance": variance}
