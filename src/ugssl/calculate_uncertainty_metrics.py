@@ -73,7 +73,7 @@ def main(predictions_dir, csv_path, pkl_dir, n_labels, verbose=False):
         csv_dict = {}
 
     metrics = {
-        "pairwise_dsc": PairwiseDSC([i for i in range(n_labels + 1)]),
+        "pairwise_dsc": PairwiseDSC([i + 1 for i in range(n_labels)]),
         "max_probability": MaxProbability(),
         "entropy": Entropy(),
         "variance": Variance(),
